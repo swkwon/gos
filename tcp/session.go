@@ -1,14 +1,20 @@
 package tcp
 
-import "context"
+import (
+	"context"
+	"net"
+)
 
 // Session ...
 type Session struct {
-	ctx context.Context
+	ctx  context.Context
+	sock net.Conn
+	Key  string
 }
 
-func newSession(ctx context.Context) *Session {
+func newSession(ctx context.Context, sock net.Conn) *Session {
 	return &Session{
-		ctx: ctx,
+		ctx:  ctx,
+		sock: sock,
 	}
 }

@@ -5,29 +5,30 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
 
 // Server ...
 type Server struct {
-	addr           *net.TCPAddr
-	listener       *net.TCPListener
-	serverCtx      context.Context
-	cancelFunc     context.CancelFunc
-	sigCh          chan os.Signal
-	done           chan bool
-	sessionManager *manager
+	addr       *net.TCPAddr
+	serverCtx  context.Context
+	cancelFunc context.CancelFunc
+	sigCh      chan os.Signal
+	done       chan bool
+	listener   *net.TCPListener
+	sessionMap sync.Map
 }
 
 // New ...
 func New() *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		serverCtx:      ctx,
-		cancelFunc:     cancel,
-		sigCh:          make(chan os.Signal, 1),
-		done:           make(chan bool, 1),
-		sessionManager: newSessionManager(),
+		serverCtx:  ctx,
+		cancelFunc: cancel,
+		sigCh:      make(chan os.Signal, 1),
+		done:       make(chan bool, 1),
+		sessionMap: sync.Map{},
 	}
 }
 
@@ -50,20 +51,6 @@ func (t *Server) Start(address string) error {
 	return nil
 }
 
-func (t *Server) accept() {
-	for {
-		select {
-		case <-t.serverCtx.Done():
-			return
-		default:
-			sock, err := t.listener.Accept()
-			if err == nil {
-
-			}
-		}
-	}
-}
-
 func (t *Server) setSignal() {
 	signal.Notify(t.sigCh, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGSEGV)
 	go func() {
@@ -73,4 +60,18 @@ func (t *Server) setSignal() {
 		}
 		t.cancelFunc()
 	}()
+}
+
+func (t *Server) accept() {
+	for {
+		select {
+		case <-t.serverCtx.Done():
+			return
+		default:
+			sock, err := t.listener.Accept()
+			if err == nil {
+				t.sessionMap.Store(newSession(t.serverCtx, sock), 1)
+			}
+		}
+	}
 }
