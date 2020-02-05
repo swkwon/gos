@@ -1,7 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"gos/tcp"
+	"log"
+)
+
+func handler(s *tcp.Session, data []byte) {
+
+}
 
 func main() {
-	fmt.Println("This is example.")
+	server := tcp.New()
+	server.RegisterHandler(handler)
+	if e := server.Start(":9999"); e != nil {
+		log.Fatal(e)
+	}
 }
