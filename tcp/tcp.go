@@ -2,11 +2,25 @@ package tcp
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+)
+
+const (
+	name = `
+
+     __________  _____
+    / ____/ __ \/ ___/
+   / / __/ / / /\__ \
+  / /_/ / /_/ /___/ /
+  \____/\____//____/   v0.0.1
+           simple, fast, easy
+-----------------------------
+  `
 )
 
 // Server ...
@@ -17,7 +31,6 @@ type Server struct {
 	sigCh      chan os.Signal
 	listener   *net.TCPListener
 	handler    HandlerFunc
-	done       chan bool
 }
 
 // New ...
@@ -27,7 +40,6 @@ func New() *Server {
 		serverCtx:  ctx,
 		cancelFunc: cancel,
 		sigCh:      make(chan os.Signal, 1),
-		done:       make(chan bool, 1),
 	}
 }
 
@@ -49,8 +61,7 @@ func (t *Server) Start(address string) error {
 		return err
 	}
 	t.setSignal()
-	go t.accept()
-	<-t.done
+	t.accept()
 	return nil
 }
 
@@ -60,18 +71,23 @@ func (t *Server) setSignal() {
 		select {
 		case s := <-t.sigCh:
 			log.Println("got signal", s)
-			t.done <- true
+			t.listener.Close()
 		}
 		t.cancelFunc()
 	}()
 }
 
 func (t *Server) accept() {
+	fmt.Println(name)
+	log.Println("TCP server started on", t.addr.String())
 	for {
 		sock, err := t.listener.Accept()
 		if err == nil {
 			s := newSession(t, sock)
-			go s.receive()
+			go s.receiveProcess()
+			go s.sendProcess()
+		} else {
+			log.Fatal(err)
 		}
 	}
 }
