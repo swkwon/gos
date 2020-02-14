@@ -3,17 +3,12 @@ package main
 import (
 	"encoding/binary"
 	"encoding/json"
-	"gos/tcp"
 	"log"
 	"net"
 	"time"
-)
 
-// Return ...
-type Return struct {
-	Result string `json:"result"`
-	Msg    string `json:"msg"`
-}
+	"github.com/swkwon/gos/tcp"
+)
 
 func handler(c tcp.Context) {
 	d := c.GetReceived()

@@ -2,25 +2,32 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
+	"os"
+	"path"
 )
 
 var newProject string
-var compile string
 
 func flags() {
 	flag.StringVar(&newProject, "new", "", "input your awesome project name")
-	flag.StringVar(&compile, "compile", "", "input your messages directory")
 	flag.Parse()
+}
+
+func createFolder(dir string) error {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		pathAll := path.Join(dir, "message")
+		log.Println(pathAll)
+		return os.MkdirAll(pathAll, 0755)
+	}
+	return os.ErrExist
 }
 
 func main() {
 	flags()
 	if len(newProject) > 0 {
 		// make folder
+		createFolder(newProject)
 		// make files
-		fmt.Println(newProject)
-	} else if len(compile) > 0 {
-		fmt.Println(compile)
 	}
 }

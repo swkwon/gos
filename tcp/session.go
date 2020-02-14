@@ -90,7 +90,6 @@ func (s *Session) received(raw []byte) error {
 	return nil
 }
 
-// Send ...
 func (s *Session) send(v []byte) {
 	size := len(v)
 	header := make([]byte, 4)
@@ -98,7 +97,6 @@ func (s *Session) send(v []byte) {
 	s.sendCh <- append(header, v...)
 }
 
-// Close ...
 func (s *Session) close() {
 	if s != nil {
 		s.sock.Close()

@@ -22,9 +22,13 @@ func (c *sessionContext) GetReceived() []byte {
 	return c.received
 }
 
+func marshal(v interface{}) ([]byte, error) {
+	return json.Marshal(v)
+}
+
 // JSON ...
 func (c *sessionContext) JSON(v interface{}) error {
-	b, e := json.Marshal(v)
+	b, e := marshal(v)
 	if e != nil {
 		return e
 	}
@@ -34,7 +38,7 @@ func (c *sessionContext) JSON(v interface{}) error {
 
 // JSONCompact ...
 func (c *sessionContext) JSONCompact(v interface{}) error {
-	b, e := json.Marshal(v)
+	b, e := marshal(v)
 	if e != nil {
 		return e
 	}
