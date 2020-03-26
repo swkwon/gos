@@ -3,49 +3,175 @@ package glog
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"time"
 )
 
-// GLogger ...
-type GLogger interface {
+// Logger ...
+type Logger interface {
 	Info(v ...interface{})
+	Infof(format string, v ...interface{})
+	Warning(v ...interface{})
+	Warningf(format string, v ...interface{})
+	Error(v ...interface{})
+	Errorf(format string, v ...interface{})
+	Debug(v ...interface{})
+	Debugf(format string, v ...interface{})
+	Wait()
+	Stop()
 }
 
+type makeFuncType func(*message, string) string
+
 type logger struct {
-	Message chan []string
-	Ctx     context.Context
-	cancel  context.CancelFunc
+	c          chan *message
+	ctx        context.Context
+	cancel     context.CancelFunc
+	writer     io.Writer
+	wg         *sync.WaitGroup
+	makeFunc   makeFuncType
+	timeFormat string
+	logLevel   level
 }
 
 func (l *logger) Info(v ...interface{}) {
-	l.Message <- fmt.Sprintln(v...)
+	l.into(infoLevel, fmt.Sprint(v...))
+}
+
+func (l *logger) Infof(format string, v ...interface{}) {
+	l.into(infoLevel, fmt.Sprintf(format, v...))
+}
+
+func (l *logger) Warning(v ...interface{}) {
+	l.into(warningLevel, fmt.Sprint(v...))
+}
+
+func (l *logger) Warningf(format string, v ...interface{}) {
+	l.into(warningLevel, fmt.Sprintf(format, v...))
+}
+
+func (l *logger) Error(v ...interface{}) {
+	l.into(errorLevel, fmt.Sprint(v...))
+}
+
+func (l *logger) Errorf(format string, v ...interface{}) {
+	l.into(errorLevel, fmt.Sprintf(format, v...))
+}
+
+func (l *logger) Debug(v ...interface{}) {
+	l.into(debugLevel, fmt.Sprint(v...))
+}
+
+func (l *logger) Debugf(format string, v ...interface{}) {
+	l.into(debugLevel, fmt.Sprintf(format, v...))
+}
+
+func (l *logger) Wait() {
+	l.wg.Wait()
+}
+
+func (l *logger) Stop() {
+	if l.cancel != nil {
+		l.cancel()
+	}
 }
 
 // New ...
-func New(config *Config) GLogger {
-	return makeLogger(config, context.Background())
+func New(config *Config) (Logger, error) {
+	return makeLogger(context.Background(), config)
 }
 
-// NewWithContext ...
-func NewWithContext(ctx context.Context, config *Config) GLogger {
-	return makeLogger(config, ctx)
-}
-
-func makeLogger(ctx context.Context, config *Config) *logger {
-	newCtx, cancelFunc := context.WithCancel(context.Background())
-	ins := &logger{
-		Message: make(chan []string, 1000),
-		Ctx:     newCtx,
-		cancel:  cancelFunc,
+func makeLogger(ctx context.Context, config *Config) (*logger, error) {
+	checkConfig(config)
+	writer, err := makeWriter(config)
+	if err != nil {
+		return nil, err
+	}
+	newCtx, cancelFunc := context.WithCancel(ctx)
+	l := &logger{
+		c:          make(chan *message, 1000),
+		ctx:        newCtx,
+		cancel:     cancelFunc,
+		writer:     writer,
+		wg:         &sync.WaitGroup{},
+		makeFunc:   getMakeFunc(config.Format),
+		timeFormat: config.DateTimeFormat,
+		logLevel:   getLogLevel(config.LogLevel),
 	}
 
+	l.wg.Add(1)
 	go func() {
 		for {
 			select {
-			case msg := <-ins.Message:
-				ins.Print(msg)
-			case <-ins.Ctx.Done():
+			case v := <-l.c:
+				l.print(l.makeFunc(v, l.timeFormat))
+			case <-l.ctx.Done():
+				close(l.c)
+				l.writeAll()
+				l.wg.Done()
 				return
 			}
 		}
 	}()
+
+	return l, nil
+}
+
+func (l *logger) writeAll() {
+	for elem := range l.c {
+		l.print(l.makeFunc(elem, l.timeFormat))
+	}
+}
+
+func (l *logger) print(v string) {
+	bytes := []byte(v)
+	length := len(bytes)
+	for offset := 0; offset < length; {
+		if n, err := l.writer.Write(bytes[offset:]); err != nil {
+			break
+		} else {
+			offset += n
+		}
+	}
+}
+
+func makeWriter(config *Config) (io.Writer, error) {
+	switch {
+	case strings.EqualFold(config.Type, "console"):
+		return os.Stdout, nil
+	}
+
+	return nil, fmt.Errorf("invalid config type: %s", config.Type)
+}
+
+func checkConfig(config *Config) {
+	if config.Format == "" {
+		config.Format = "text"
+	}
+	if config.DateTimeFormat == "" {
+		config.DateTimeFormat = time.RFC3339
+	}
+}
+
+func getMakeFunc(textFormat string) makeFuncType {
+	switch {
+	case strings.EqualFold(textFormat, "json"):
+		return makeJSON
+	default:
+		return makeText
+	}
+}
+
+func (l *logger) into(logLevel level, msg string) {
+	if l.logLevel < logLevel {
+		return
+	}
+
+	l.c <- &message{
+		logLevel: logLevel,
+		Message:  msg,
+	}
 }
