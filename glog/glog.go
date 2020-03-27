@@ -162,6 +162,8 @@ func checkConfig(config *Config) {
 	}
 	if config.DateTimeFormat == "" {
 		config.DateTimeFormat = time.RFC3339
+	} else {
+		config.DateTimeFormat = dateTimeFormatParsing(config.DateTimeFormat)
 	}
 }
 
@@ -186,4 +188,29 @@ func job(l *logger) {
 			return
 		}
 	}
+}
+
+var timeFormat = map[string]string{
+	"ansic":       time.ANSIC,
+	"unixdate":    time.UnixDate,
+	"rubydate":    time.RubyDate,
+	"rfc822":      time.RFC822,
+	"rfc822z":     time.RFC822Z,
+	"rfc850":      time.RFC850,
+	"rfc1123":     time.RFC1123,
+	"rfc1123z":    time.RFC1123Z,
+	"rfc3339":     time.RFC3339,
+	"rfc3339nano": time.RFC3339Nano,
+	"kitchen":     time.Kitchen,
+	"stamp":       time.Stamp,
+	"stampmilli":  time.StampMilli,
+	"stampmicro":  time.StampMicro,
+	"stampnano":   time.StampNano,
+}
+
+func dateTimeFormatParsing(s string) string {
+	if format, ok := timeFormat[strings.ToLower(s)]; ok {
+		return format
+	}
+	return s
 }
