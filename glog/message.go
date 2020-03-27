@@ -22,6 +22,9 @@ type message struct {
 	Parameter   map[string]interface{} `json:"parameter,omitempty"`
 	DateTime    string                 `json:"date_time,omitempty"`
 	LogLevelStr string                 `json:"log_level"`
+	FileName    string                 `json:"file_name"`
+	Line        int                    `json:"line"`
+	FuncName    string                 `json:"func_name"`
 }
 
 var logLevelMap = map[level]string{
@@ -62,5 +65,5 @@ func makeText(m *message, timeFormat string) string {
 		m.LogLevelStr = i
 	}
 
-	return fmt.Sprintf("[%s] [%5v] %s\n", m.DateTime, m.LogLevelStr, m.Message)
+	return fmt.Sprintf("[%s] [%s:%d:%s] [%5v] %s\n", m.DateTime, m.FileName, m.Line, m.FuncName, m.LogLevelStr, m.Message)
 }

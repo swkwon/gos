@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +37,11 @@ type logger struct {
 	makeFunc   makeFuncType
 	timeFormat string
 	logLevel   level
+}
+
+// New ...
+func New(config *Config) (Logger, error) {
+	return makeLogger(context.Background(), config)
 }
 
 func (l *logger) Info(v ...interface{}) {
@@ -79,9 +86,41 @@ func (l *logger) Stop() {
 	}
 }
 
-// New ...
-func New(config *Config) (Logger, error) {
-	return makeLogger(context.Background(), config)
+func (l *logger) writeAll() {
+	for elem := range l.c {
+		l.print(l.makeFunc(elem, l.timeFormat))
+	}
+}
+
+func (l *logger) print(v string) {
+	bytes := []byte(v)
+	length := len(bytes)
+	for offset := 0; offset < length; {
+		if n, err := l.writer.Write(bytes[offset:]); err != nil {
+			break
+		} else {
+			offset += n
+		}
+	}
+}
+
+func (l *logger) into(logLevel level, msg string) {
+	if l.logLevel < logLevel {
+		return
+	}
+
+	pc, file, line, _ := runtime.Caller(2)
+	_, fileName := path.Split(file)
+	parts1 := strings.Split(runtime.FuncForPC(pc).Name(), "/")
+	parts2 := strings.SplitN(parts1[len(parts1)-1], ".", 2)
+	funcName := parts2[1]
+	l.c <- &message{
+		logLevel: logLevel,
+		Message:  msg,
+		FileName: fileName,
+		Line:     line,
+		FuncName: funcName,
+	}
 }
 
 func makeLogger(ctx context.Context, config *Config) (*logger, error) {
@@ -103,39 +142,9 @@ func makeLogger(ctx context.Context, config *Config) (*logger, error) {
 	}
 
 	l.wg.Add(1)
-	go func() {
-		for {
-			select {
-			case v := <-l.c:
-				l.print(l.makeFunc(v, l.timeFormat))
-			case <-l.ctx.Done():
-				close(l.c)
-				l.writeAll()
-				l.wg.Done()
-				return
-			}
-		}
-	}()
+	go job(l)
 
 	return l, nil
-}
-
-func (l *logger) writeAll() {
-	for elem := range l.c {
-		l.print(l.makeFunc(elem, l.timeFormat))
-	}
-}
-
-func (l *logger) print(v string) {
-	bytes := []byte(v)
-	length := len(bytes)
-	for offset := 0; offset < length; {
-		if n, err := l.writer.Write(bytes[offset:]); err != nil {
-			break
-		} else {
-			offset += n
-		}
-	}
 }
 
 func makeWriter(config *Config) (io.Writer, error) {
@@ -165,13 +174,16 @@ func getMakeFunc(textFormat string) makeFuncType {
 	}
 }
 
-func (l *logger) into(logLevel level, msg string) {
-	if l.logLevel < logLevel {
-		return
-	}
-
-	l.c <- &message{
-		logLevel: logLevel,
-		Message:  msg,
+func job(l *logger) {
+	for {
+		select {
+		case v := <-l.c:
+			l.print(l.makeFunc(v, l.timeFormat))
+		case <-l.ctx.Done():
+			close(l.c)
+			l.writeAll()
+			l.wg.Done()
+			return
+		}
 	}
 }
