@@ -6,7 +6,7 @@ import (
 )
 
 func TestLogger(t *testing.T) {
-	myLogger, err := New(&Config{Type: "console", DateTimeFormat: time.RFC3339Nano})
+	myLogger, err := New(&Config{Type: "console", DateTimeFormat: "RubyDate"})
 	if err != nil {
 		t.Error(err)
 	}
