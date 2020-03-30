@@ -2,6 +2,7 @@ package glog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,8 +23,7 @@ type Logger interface {
 	Errorf(format string, v ...interface{})
 	Debug(v ...interface{})
 	Debugf(format string, v ...interface{})
-	Wait()
-	Stop()
+	Close()
 }
 
 type makeFuncType func(*message, string) string
@@ -76,14 +76,11 @@ func (l *logger) Debugf(format string, v ...interface{}) {
 	l.into(debugLevel, fmt.Sprintf(format, v...))
 }
 
-func (l *logger) Wait() {
-	l.wg.Wait()
-}
-
-func (l *logger) Stop() {
+func (l *logger) Close() {
 	if l.cancel != nil {
 		l.cancel()
 	}
+	l.wg.Wait()
 }
 
 func (l *logger) writeAll() {
@@ -151,6 +148,16 @@ func makeWriter(config *Config) (io.Writer, error) {
 	switch {
 	case strings.EqualFold(config.Type, "console"):
 		return os.Stdout, nil
+	case strings.EqualFold(config.Type, "tcp"):
+		if config.TCP == nil {
+			return nil, errors.New("tcp info is nil")
+		}
+		return makeTCPWriter(config.TCP.Host)
+	case strings.EqualFold(config.Type, "udp"):
+		if config.UDP == nil {
+			return nil, errors.New("udp info is nil")
+		}
+		return makeUDPWriter(config.UDP.Host)
 	}
 
 	return nil, fmt.Errorf("invalid config type: %s", config.Type)

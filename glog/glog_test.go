@@ -19,8 +19,7 @@ func TestLogger(t *testing.T) {
 	myLogger.Info("you are my friend")
 	myLogger.Info("just do it")
 
-	myLogger.Stop()
-	myLogger.Wait()
+	myLogger.Close()
 
 	myLogger2, err := New(&Config{
 		Format:         "json",
@@ -32,8 +31,7 @@ func TestLogger(t *testing.T) {
 	myLogger2.Info("I am swkwon")
 	myLogger2.Info("this is test code")
 	myLogger2.Infof("%s %s", "first", "second")
-	myLogger2.Stop()
-	myLogger2.Wait()
+	myLogger2.Close()
 }
 
 func BenchmarkSingleLog(b *testing.B) {
@@ -51,8 +49,7 @@ func BenchmarkSingleLog(b *testing.B) {
 		// os.Stdout.Write([]byte(str))
 	}
 
-	myLogger.Stop()
-	myLogger.Wait()
+	myLogger.Close()
 }
 
 func BenchmarkPrint(b *testing.B) {
