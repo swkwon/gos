@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"runtime"
 	"strings"
@@ -147,7 +146,7 @@ func makeLogger(ctx context.Context, config *Config) (*logger, error) {
 func makeWriter(config *Config) (io.Writer, error) {
 	switch {
 	case strings.EqualFold(config.Type, "console"):
-		return os.Stdout, nil
+		return makeSTDOutWriter()
 	case strings.EqualFold(config.Type, "tcp"):
 		if config.TCP == nil {
 			return nil, errors.New("tcp info is nil")

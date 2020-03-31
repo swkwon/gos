@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 )
 
 func makeTCPWriter(host string) (io.Writer, error) {
@@ -19,4 +20,8 @@ func makeUDPWriter(host string) (io.Writer, error) {
 		return nil, errors.New("udp host info is zero")
 	}
 	return net.Dial("udp", host)
+}
+
+func makeSTDOutWriter() (io.WriteCloser, error) {
+	return os.Stdout, nil
 }
