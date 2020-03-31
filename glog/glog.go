@@ -22,7 +22,7 @@ type Logger interface {
 	Errorf(format string, v ...interface{})
 	Debug(v ...interface{})
 	Debugf(format string, v ...interface{})
-	Close()
+	Close() error
 }
 
 type makeFuncType func(*message, string) string
@@ -31,7 +31,7 @@ type logger struct {
 	c          chan *message
 	ctx        context.Context
 	cancel     context.CancelFunc
-	writer     io.Writer
+	writer     io.WriteCloser
 	wg         *sync.WaitGroup
 	makeFunc   makeFuncType
 	timeFormat string
@@ -75,11 +75,17 @@ func (l *logger) Debugf(format string, v ...interface{}) {
 	l.into(debugLevel, fmt.Sprintf(format, v...))
 }
 
-func (l *logger) Close() {
+func (l *logger) Close() error {
 	if l.cancel != nil {
 		l.cancel()
 	}
-	l.wg.Wait()
+	if l.wg != nil {
+		l.wg.Wait()
+	}
+	if l.writer != nil {
+		return l.writer.Close()
+	}
+	return nil
 }
 
 func (l *logger) writeAll() {
@@ -143,7 +149,7 @@ func makeLogger(ctx context.Context, config *Config) (*logger, error) {
 	return l, nil
 }
 
-func makeWriter(config *Config) (io.Writer, error) {
+func makeWriter(config *Config) (io.WriteCloser, error) {
 	switch {
 	case strings.EqualFold(config.Type, "console"):
 		return makeSTDOutWriter()
@@ -157,6 +163,11 @@ func makeWriter(config *Config) (io.Writer, error) {
 			return nil, errors.New("udp info is nil")
 		}
 		return makeUDPWriter(config.UDP.Host)
+	case strings.EqualFold(config.Type, "file"):
+		if config.File == nil {
+			return nil, errors.New("file info is nil")
+		}
+		return makeFileWriter(config.File)
 	}
 
 	return nil, fmt.Errorf("invalid config type: %s", config.Type)
