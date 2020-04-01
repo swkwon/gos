@@ -20,7 +20,7 @@ simple, goroutine safe logger
     "file": {                                              // if using file type
         "path": <"file path">,
         "file_name": <"file name">,
-        "rotation": <"every_hour" | "every_day">
+        "rotation": <"hour" | "day">
     },
     "tcp": {                                               // if using tcp type
         "host":"127.0.0.1:1234"

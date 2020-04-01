@@ -2,18 +2,49 @@ package glog
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
-type glogWriter struct {
-	writerType string
-	wc         io.WriteCloser
+const (
+	rotationHour = 0
+	rotationDay  = 1
+)
+
+// IWriter ...
+type IWriter interface {
+	Close() error
+	Write(v []byte, offset int) (int, error)
 }
 
-func makeTCPWriter(host string) (io.WriteCloser, error) {
+type tcpWriter struct {
+	host string
+	wc   io.WriteCloser
+}
+
+type udpWriter struct {
+	host string
+	wc   io.WriteCloser
+}
+
+type stdoutWriter struct {
+	wc io.WriteCloser
+}
+
+type fileWriter struct {
+	path     string
+	file     string
+	rotation time.Duration
+	generate time.Time
+	wc       io.WriteCloser
+}
+
+func makeTCPWriter(host string) (IWriter, error) {
 	if len(host) <= 0 {
 		return nil, errors.New("tcp host info is zero")
 	}
@@ -23,13 +54,13 @@ func makeTCPWriter(host string) (io.WriteCloser, error) {
 		return nil, err
 	}
 
-	return &glogWriter{
-		writerType: "tcp",
-		wc:         c,
+	return &tcpWriter{
+		host: host,
+		wc:   c,
 	}, nil
 }
 
-func makeUDPWriter(host string) (io.WriteCloser, error) {
+func makeUDPWriter(host string) (IWriter, error) {
 	if len(host) <= 0 {
 		return nil, errors.New("udp host info is zero")
 	}
@@ -38,41 +69,145 @@ func makeUDPWriter(host string) (io.WriteCloser, error) {
 		return nil, err
 	}
 
-	return &glogWriter{
-		writerType: "udp",
-		wc:         c,
+	return &udpWriter{
+		host: host,
+		wc:   c,
 	}, nil
 }
 
-func makeSTDOutWriter() (io.WriteCloser, error) {
-	return &glogWriter{
-		writerType: "console",
-		wc:         os.Stdout,
+func makeSTDOutWriter() (IWriter, error) {
+	return &stdoutWriter{
+		wc: os.Stdout,
 	}, nil
 }
 
-func makeFileWriter(file *FileConfig) (io.WriteCloser, error) {
-	return nil, errors.New("not implement")
+func makeFileWriter(file *FileConfig) (IWriter, error) {
+	fullpath := filepath.Join(file.Path, file.FileName)
+	f, e := os.OpenFile(fullpath, os.O_CREATE|os.O_WRONLY, os.FileMode(0644))
+	if e != nil {
+		return nil, e
+	}
+	var rot time.Duration
+	if file.Rotation == "hour" {
+		rot = 60 * time.Minute
+	} else {
+		rot = 24 * time.Hour
+	}
+	return &fileWriter{
+		file:     file.FileName,
+		path:     file.Path,
+		rotation: rot,
+		generate: time.Now(),
+		wc:       f,
+	}, nil
 }
 
-// Write ...
-func (w *glogWriter) Write(v []byte) (int, error) {
-	if w == nil || w.wc == nil {
+func (w *tcpWriter) Write(v []byte, offset int) (int, error) {
+	if w.wc == nil {
 		return 0, errors.New("writer is nil")
 	}
 
-	return w.wc.Write(v)
+	return w.wc.Write(v[offset:])
 }
 
-// Close ...
-func (w *glogWriter) Close() error {
-	if w == nil || w.wc == nil {
-		return nil
-	}
-
-	if strings.EqualFold(w.writerType, "console") {
+func (w *tcpWriter) Close() error {
+	if w.wc == nil {
 		return nil
 	}
 
 	return w.wc.Close()
+}
+
+func (w *udpWriter) Write(v []byte, offset int) (int, error) {
+	if w.wc == nil {
+		return 0, errors.New("writer is nil")
+	}
+
+	return w.wc.Write(v[offset:])
+}
+
+func (w *udpWriter) Close() error {
+	if w.wc == nil {
+		return nil
+	}
+
+	return w.wc.Close()
+}
+
+func (w *stdoutWriter) Write(v []byte, offset int) (int, error) {
+	if w.wc == nil {
+		return 0, errors.New("writer is nil")
+	}
+
+	return w.wc.Write(v[offset:])
+}
+
+func (w *stdoutWriter) Close() error {
+	return nil
+}
+
+func (w *fileWriter) Write(v []byte, offset int) (int, error) {
+	if w.wc == nil {
+		return 0, errors.New("writer is nil")
+	}
+	if offset == 0 {
+		w.checkRotation()
+	}
+	return w.wc.Write(v[offset:])
+}
+
+func (w *fileWriter) Close() error {
+	if w.wc == nil {
+		return nil
+	}
+
+	return w.wc.Close()
+}
+
+func (w *fileWriter) checkRotation() {
+	sub := time.Now().Sub(w.generate.Truncate(w.rotation))
+	if sub > w.rotation {
+		// make daily folder
+		folderName := fmt.Sprintf("%d%02d%02d", w.generate.Year(), w.generate.Month(), w.generate.Day())
+		target := filepath.Join(w.path, folderName)
+		_ = os.Mkdir(target, os.FileMode(0777))
+
+		// copy file
+		_ = w.wc.Close()
+		srcFile := filepath.Join(w.path, w.file)
+		ext := filepath.Ext(w.file)
+		fileName := strings.TrimSuffix(w.file, ext)
+		backup := fmt.Sprintf("%s_%d%02d%02d%02d%02d%02d.log", fileName, w.generate.Year(), w.generate.Month(), w.generate.Day(), w.generate.Hour(), w.generate.Minute(), w.generate.Second())
+		dstFile := filepath.Join(target, backup)
+		fileCopy(srcFile, dstFile)
+
+		// new file
+		fullpath := filepath.Join(w.path, w.file)
+		f, e := os.OpenFile(fullpath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0644))
+		if e == nil {
+			w.wc = f
+		} else {
+			w.wc = nil
+		}
+	}
+}
+
+func fileCopy(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }

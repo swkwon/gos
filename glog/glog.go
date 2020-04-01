@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"runtime"
 	"strings"
@@ -31,7 +30,7 @@ type logger struct {
 	c          chan *message
 	ctx        context.Context
 	cancel     context.CancelFunc
-	writer     io.WriteCloser
+	writer     IWriter
 	wg         *sync.WaitGroup
 	makeFunc   makeFuncType
 	timeFormat string
@@ -98,7 +97,7 @@ func (l *logger) print(v string) {
 	bytes := []byte(v)
 	length := len(bytes)
 	for offset := 0; offset < length; {
-		if n, err := l.writer.Write(bytes[offset:]); err != nil {
+		if n, err := l.writer.Write(bytes, offset); err != nil {
 			break
 		} else {
 			offset += n
@@ -149,21 +148,22 @@ func makeLogger(ctx context.Context, config *Config) (*logger, error) {
 	return l, nil
 }
 
-func makeWriter(config *Config) (io.WriteCloser, error) {
-	switch {
-	case strings.EqualFold(config.Type, "console"):
+func makeWriter(config *Config) (IWriter, error) {
+
+	switch strings.ToLower(config.Type) {
+	case "console":
 		return makeSTDOutWriter()
-	case strings.EqualFold(config.Type, "tcp"):
+	case "tcp":
 		if config.TCP == nil {
 			return nil, errors.New("tcp info is nil")
 		}
 		return makeTCPWriter(config.TCP.Host)
-	case strings.EqualFold(config.Type, "udp"):
+	case "udp":
 		if config.UDP == nil {
 			return nil, errors.New("udp info is nil")
 		}
 		return makeUDPWriter(config.UDP.Host)
-	case strings.EqualFold(config.Type, "file"):
+	case "file":
 		if config.File == nil {
 			return nil, errors.New("file info is nil")
 		}
