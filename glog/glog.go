@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// Fields ...
+type Fields map[string]interface{}
+
 // Logger ...
 type Logger interface {
 	Info(v ...interface{})
@@ -23,6 +26,7 @@ type Logger interface {
 	Debug(v ...interface{})
 	Debugf(format string, v ...interface{})
 	Close() []error
+	WithFields(f Fields) IEntry
 }
 
 type makeFuncType func(*message, string) string
@@ -45,35 +49,35 @@ func New(config *Config) (Logger, error) {
 }
 
 func (l *logger) Info(v ...interface{}) {
-	l.into(infoLevel, fmt.Sprint(v...))
+	l.into(infoLevel, fmt.Sprint(v...), nil)
 }
 
 func (l *logger) Infof(format string, v ...interface{}) {
-	l.into(infoLevel, fmt.Sprintf(format, v...))
+	l.into(infoLevel, fmt.Sprintf(format, v...), nil)
 }
 
 func (l *logger) Warning(v ...interface{}) {
-	l.into(warningLevel, fmt.Sprint(v...))
+	l.into(warningLevel, fmt.Sprint(v...), nil)
 }
 
 func (l *logger) Warningf(format string, v ...interface{}) {
-	l.into(warningLevel, fmt.Sprintf(format, v...))
+	l.into(warningLevel, fmt.Sprintf(format, v...), nil)
 }
 
 func (l *logger) Error(v ...interface{}) {
-	l.into(errorLevel, fmt.Sprint(v...))
+	l.into(errorLevel, fmt.Sprint(v...), nil)
 }
 
 func (l *logger) Errorf(format string, v ...interface{}) {
-	l.into(errorLevel, fmt.Sprintf(format, v...))
+	l.into(errorLevel, fmt.Sprintf(format, v...), nil)
 }
 
 func (l *logger) Debug(v ...interface{}) {
-	l.into(debugLevel, fmt.Sprint(v...))
+	l.into(debugLevel, fmt.Sprint(v...), nil)
 }
 
 func (l *logger) Debugf(format string, v ...interface{}) {
-	l.into(debugLevel, fmt.Sprintf(format, v...))
+	l.into(debugLevel, fmt.Sprintf(format, v...), nil)
 }
 
 func (l *logger) Close() []error {
@@ -102,6 +106,13 @@ func (l *logger) Close() []error {
 	return errs
 }
 
+func (l *logger) WithFields(f Fields) IEntry {
+	return &entry{
+		field:       f,
+		logInstance: l,
+	}
+}
+
 func (l *logger) writeAll() {
 	for elem := range l.c {
 		l.print(l.makeFunc(elem, l.timeFormat))
@@ -124,7 +135,7 @@ func (l *logger) logging(logLevel level) bool {
 	return l.logLevel >= logLevel
 }
 
-func (l *logger) into(logLevel level, msg string) {
+func (l *logger) into(logLevel level, msg string, field Fields) {
 	needLogging := false
 	for _, v := range l.subs {
 		if v.logging(logLevel) {
@@ -153,6 +164,7 @@ func (l *logger) into(logLevel level, msg string) {
 			FileName: fileName,
 			Line:     line,
 			FuncName: funcName,
+			Param:    field,
 		}
 	}
 
@@ -164,6 +176,7 @@ func (l *logger) into(logLevel level, msg string) {
 				FileName: fileName,
 				Line:     line,
 				FuncName: funcName,
+				Param:    field,
 			}
 		}
 	}

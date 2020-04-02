@@ -87,6 +87,7 @@ func TestMultiLogger(t *testing.T) {
 		mylogger.Error("this is error")
 		mylogger.Warning("this is warn")
 		mylogger.Info("this is info")
+		mylogger.WithFields(Fields{"key": "value", "hello": 20, "list": []string{"a", "b", "c"}}).Info("with field")
 		mylogger.Close()
 	}
 }

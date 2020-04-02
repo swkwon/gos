@@ -9,7 +9,7 @@ func TestMarshal(t *testing.T) {
 	m := &message{
 		logLevel: infoLevel,
 		Message:  "test message",
-		Parameter: map[string]interface{}{
+		Param: Fields{
 			"name": "swkwon",
 			"age":  40,
 		},
