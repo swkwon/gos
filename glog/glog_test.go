@@ -60,3 +60,33 @@ func BenchmarkPrint(b *testing.B) {
 		_ = make([]byte, 1024)
 	}
 }
+
+func TestMultiLogger(t *testing.T) {
+	c := &Config{
+		Type:     "console",
+		Format:   "text",
+		LogLevel: "debug",
+		Sub: []*Config{
+			&Config{
+				Type:     "file",
+				Format:   "json",
+				LogLevel: "error",
+				File: &FileConfig{
+					Path:     "C:\\Users\\swkwon\\Documents\\Github\\gos\\",
+					FileName: "mylog.log",
+				},
+			},
+		},
+	}
+
+	mylogger, err := New(c)
+	if err != nil {
+		t.Error(err)
+	} else {
+		mylogger.Debug("this is debug")
+		mylogger.Error("this is error")
+		mylogger.Warning("this is warn")
+		mylogger.Info("this is info")
+		mylogger.Close()
+	}
+}

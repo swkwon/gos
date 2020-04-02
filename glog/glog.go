@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"path"
 	"runtime"
 	"strings"
@@ -21,7 +22,7 @@ type Logger interface {
 	Errorf(format string, v ...interface{})
 	Debug(v ...interface{})
 	Debugf(format string, v ...interface{})
-	Close() error
+	Close() []error
 }
 
 type makeFuncType func(*message, string) string
@@ -35,6 +36,7 @@ type logger struct {
 	makeFunc   makeFuncType
 	timeFormat string
 	logLevel   level
+	subs       []*logger
 }
 
 // New ...
@@ -74,17 +76,30 @@ func (l *logger) Debugf(format string, v ...interface{}) {
 	l.into(debugLevel, fmt.Sprintf(format, v...))
 }
 
-func (l *logger) Close() error {
+func (l *logger) Close() []error {
 	if l.cancel != nil {
 		l.cancel()
 	}
 	if l.wg != nil {
 		l.wg.Wait()
 	}
-	if l.writer != nil {
-		return l.writer.Close()
+
+	for _, v := range l.subs {
+		v.wg.Wait()
 	}
-	return nil
+
+	var errs []error
+	if l.writer != nil {
+		if e := l.writer.Close(); e != nil {
+			errs = append(errs, e)
+		}
+	}
+	for _, v := range l.subs {
+		if e := v.Close(); e != nil {
+			errs = append(errs, e...)
+		}
+	}
+	return errs
 }
 
 func (l *logger) writeAll() {
@@ -105,8 +120,23 @@ func (l *logger) print(v string) {
 	}
 }
 
+func (l *logger) logging(logLevel level) bool {
+	return l.logLevel >= logLevel
+}
+
 func (l *logger) into(logLevel level, msg string) {
-	if l.logLevel < logLevel {
+	needLogging := false
+	for _, v := range l.subs {
+		if v.logging(logLevel) {
+			needLogging = true
+		}
+	}
+
+	if l.logging(logLevel) == true {
+		needLogging = true
+	}
+
+	if needLogging == false {
 		return
 	}
 
@@ -115,12 +145,27 @@ func (l *logger) into(logLevel level, msg string) {
 	parts1 := strings.Split(runtime.FuncForPC(pc).Name(), "/")
 	parts2 := strings.SplitN(parts1[len(parts1)-1], ".", 2)
 	funcName := parts2[1]
-	l.c <- &message{
-		logLevel: logLevel,
-		Message:  msg,
-		FileName: fileName,
-		Line:     line,
-		FuncName: funcName,
+
+	if l.logging(logLevel) {
+		l.c <- &message{
+			logLevel: logLevel,
+			Message:  msg,
+			FileName: fileName,
+			Line:     line,
+			FuncName: funcName,
+		}
+	}
+
+	for _, v := range l.subs {
+		if v.logging(logLevel) {
+			v.c <- &message{
+				logLevel: logLevel,
+				Message:  msg,
+				FileName: fileName,
+				Line:     line,
+				FuncName: funcName,
+			}
+		}
 	}
 }
 
@@ -128,6 +173,7 @@ func makeLogger(ctx context.Context, config *Config) (*logger, error) {
 	checkConfig(config)
 	writer, err := makeWriter(config)
 	if err != nil {
+		log.Println("failed make logger >", err)
 		return nil, err
 	}
 	newCtx, cancelFunc := context.WithCancel(ctx)
@@ -144,6 +190,27 @@ func makeLogger(ctx context.Context, config *Config) (*logger, error) {
 
 	l.wg.Add(1)
 	go job(l)
+
+	for _, v := range config.Sub {
+		checkConfig(v)
+		subWriter, err := makeWriter(v)
+		if err != nil {
+			log.Println("failed make sub logger >", err)
+			continue
+		}
+		sl := &logger{
+			c:          make(chan *message, 1000),
+			ctx:        newCtx,
+			logLevel:   getLogLevel(v.LogLevel),
+			wg:         &sync.WaitGroup{},
+			makeFunc:   getMakeFunc(v.Format),
+			timeFormat: v.DateTimeFormat,
+			writer:     subWriter,
+		}
+		sl.wg.Add(1)
+		l.subs = append(l.subs, sl)
+		go job(sl)
+	}
 
 	return l, nil
 }
