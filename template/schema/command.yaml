@@ -1,8 +1,0 @@
----
-package: message
-enum:
-  -
-    name: Command
-    member:
-      - {k: CmdEcho, v: 1, comment: command echo}
-...

@@ -1,39 +1,37 @@
 package gtime
 
 import (
-	"sync"
 	"time"
+
+	"github.com/swkwon/gos/gatomic"
 )
 
-var timeOffset time.Duration
-var mutex sync.Mutex
+var timeOffset gatomic.Int64
 
 const dateTimeFormat = "2006-01-02 15:04:05"
 
 func init() {
-	timeOffset = 0
+	timeOffset.Store(0)
 }
 
 // Now ...
 func Now() time.Time {
-	return time.Now().Add(timeOffset)
+	return time.Now().Add(time.Duration(timeOffset.Load()))
 }
 
 // AddOffset ...
 func AddOffset(t time.Duration) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	timeOffset = t
+	timeOffset.Store(int64(t))
 }
 
 // GetTimeOffset ...
 func GetTimeOffset() time.Duration {
-	return timeOffset
+	return time.Duration(timeOffset.Load())
 }
 
 // ResetOffset ...
 func ResetOffset() {
-	timeOffset = 0
+	timeOffset.Store(0)
 }
 
 // TimeToMySQLString ...
