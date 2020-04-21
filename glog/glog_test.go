@@ -67,7 +67,7 @@ func TestMultiLogger(t *testing.T) {
 		Format:   "text",
 		LogLevel: "debug",
 		Sub: []*Config{
-			&Config{
+			{
 				Type:     "file",
 				Format:   "json",
 				LogLevel: "error",
