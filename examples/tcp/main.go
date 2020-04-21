@@ -7,10 +7,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/swkwon/gos/tcp"
+	"github.com/swkwon/gos/gtcp"
 )
 
-func handler(c tcp.Context) {
+func handler(c gtcp.Context) {
 	d := c.GetReceived()
 	log.Println(string(d))
 	m := make(map[string]interface{})
@@ -41,7 +41,7 @@ func main() {
 		log.Println("end client")
 	}()
 
-	server := tcp.New()
+	server := gtcp.New()
 	server.RegisterHandler(handler)
 	if e := server.Start("localhost:9999"); e != nil {
 		log.Fatal(e)
