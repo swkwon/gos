@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/swkwon/gos/gtime"
 )
 
 const (
@@ -37,11 +39,12 @@ type stdoutWriter struct {
 }
 
 type fileWriter struct {
-	path     string
-	file     string
-	rotation time.Duration
-	generate time.Time
-	wc       io.WriteCloser
+	path         string
+	file         string
+	rotation     time.Duration
+	rotationType int
+	generate     time.Time
+	wc           io.WriteCloser
 }
 
 func makeTCPWriter(host string) (IWriter, error) {
@@ -88,17 +91,21 @@ func makeFileWriter(file *FileConfig) (IWriter, error) {
 		return nil, e
 	}
 	var rot time.Duration
+	var rt int
 	if file.Rotation == "hour" {
 		rot = 60 * time.Minute
+		rt = rotationHour
 	} else {
 		rot = 24 * time.Hour
+		rt = rotationDay
 	}
 	return &fileWriter{
-		file:     file.FileName,
-		path:     file.Path,
-		rotation: rot,
-		generate: time.Now(),
-		wc:       f,
+		file:         file.FileName,
+		path:         file.Path,
+		rotation:     rot,
+		rotationType: rt,
+		generate:     time.Now(),
+		wc:           f,
 	}, nil
 }
 
@@ -164,9 +171,21 @@ func (w *fileWriter) Close() error {
 	return w.wc.Close()
 }
 
-func (w *fileWriter) checkRotation() {
-	sub := time.Now().Sub(w.generate.Truncate(w.rotation))
+func (w *fileWriter) isRotation() bool {
+	var sub time.Duration
+	if w.rotationType == rotationHour {
+		sub = gtime.Now().Sub(gtime.CuttingMinutes(w.generate))
+	} else {
+		sub = gtime.Now().Sub(gtime.CuttingHours(w.generate))
+	}
 	if sub > w.rotation {
+		return true
+	}
+	return false
+}
+
+func (w *fileWriter) checkRotation() {
+	if w.isRotation() {
 		// make daily folder
 		folderName := fmt.Sprintf("%d%02d%02d", w.generate.Year(), w.generate.Month(), w.generate.Day())
 		target := filepath.Join(w.path, folderName)
