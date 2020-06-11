@@ -2,28 +2,20 @@ package gtime
 
 import (
 	"time"
-
-	"github.com/swkwon/gos/gatomic"
 )
-
-var timeOffset gatomic.Int64
 
 const (
 	dateTimeFormat = "2006-01-02 15:04:05"
 )
 
-func init() {
-	timeOffset.Store(0)
-}
-
 // Now ...
 func Now() time.Time {
-	return time.Now().Add(time.Duration(timeOffset.Load()))
+	return time.Now()
 }
 
 // UTCNow ...
 func UTCNow() time.Time {
-	return time.Now().UTC().Add(time.Duration(timeOffset.Load()))
+	return time.Now().UTC()
 }
 
 // CuttingSeconds ...
@@ -39,21 +31,6 @@ func CuttingMinutes(t time.Time) time.Time {
 // CuttingHours ...
 func CuttingHours(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-}
-
-// AddTimeOffset ...
-func AddTimeOffset(t time.Duration) {
-	timeOffset.Store(int64(t))
-}
-
-// GetTimeOffset ...
-func GetTimeOffset() time.Duration {
-	return time.Duration(timeOffset.Load())
-}
-
-// ResetOffset ...
-func ResetOffset() {
-	timeOffset.Store(0)
 }
 
 // TimeToMySQLString ...
